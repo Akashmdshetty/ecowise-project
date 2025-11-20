@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>EcoWise — Register</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root{
+      --bg:#f4f7f9; --card:#fff; --accent:#2c7be5; --danger:#e11d48; --muted:#6b7280;
+      --success:#10b981;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    html,body{height:100%}
+    body{margin:0;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:18px}
+    .card{width:340px;max-width:100%;background:var(--card);padding:20px;border-radius:10px;box-shadow:0 8px 30px rgba(2,6,23,0.08)}
+    h3{margin:0 0 10px;font-size:1.1rem}
+    label{display:block;font-size:0.85rem;color:#111;margin-top:8px;margin-bottom:6px}
+    input[type="text"],input[type="password"]{
+      width:100%;padding:10px;border-radius:8px;border:1px solid #e6e9ef;font-size:0.95rem;box-sizing:border-box
+    }
+    .row{display:flex;gap:8px}
+    .muted{font-size:0.85rem;color:var(--muted)}
+    .actions{margin-top:14px}
+    button[type="button"],button[type="submit"]{
+      width:100%;padding:10px;border-radius:8px;border:none;background:var(--accent);color:white;font-weight:600;cursor:pointer;
+    }
+    button[disabled]{opacity:0.6;cursor:not-allowed}
+    .link{margin-top:10px;text-align:center;font-size:13px}
+    .msg{height:20px;margin-top:8px;color:var(--danger);font-size:0.9rem}
+    .inline{display:inline-block}
+    .pw-hint{font-size:0.85rem;color:var(--muted);margin-top:6px}
+    .flex-between{display:flex;justify-content:space-between;align-items:center}
+    .small-btn{background:transparent;border:none;color:var(--accent);cursor:pointer;font-weight:600}
+    .strength{height:6px;border-radius:6px;background:#e6e9ef;margin-top:8px;overflow:hidden}
+    .strength > i{display:block;height:100%;width:0%;background:var(--danger);transition:width 200ms ease}
+    .success{color:var(--success)}
+    /* Accessible focus */
+    input:focus,button:focus{outline:3px solid rgba(59,130,246,0.12);outline-offset:2px}
+    /* small responsive */
+    @media (max-width:360px){.card{padding:16px}}
+    .download-link{display:block;margin-top:12px;text-align:center;font-size:0.85rem;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="title">
+    <h3 id="title">Create account</h3>
+
+    <form id="registerForm" novalidate>
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" autocomplete="username" required aria-required="true" placeholder="Choose a username" maxlength="32" />
+
+      <div style="margin-top:8px" class="flex-between">
+        <label for="password">Password</label>
+        <button type="button" id="togglePw" class="small-btn" aria-pressed="false" aria-controls="password">Show</button>
+      </div>
+      <input id="password" name="password" type="password" autocomplete="new-password" required aria-required="true" placeholder="At least 6 characters" minlength="6" maxlength="128" />
+      <div class="pw-hint" id="pwHint">Use 6+ characters. Mix letters & numbers for stronger password.</div>
+
+      <div class="strength" aria-hidden="true" title="Password strength">
+        <i id="pwStrengthBar" style="width:0%"></i>
+      </div>
+
+      <div class="actions">
+        <button id="registerBtn" type="submit">Create account</button>
+      </div>
+
+      <div class="link">
+        <span class="muted">Already have an account?</span>
+        <a href="login.html" style="color:var(--accent);margin-left:6px;text-decoration:none;font-weight:600">Login</a>
+      </div>
+
+      <div id="msg" class="msg" role="status" aria-live="polite"></div>
+    </form>
+
+    <!-- Developer: original project zip (local path will be transformed by tool) -->
+    <a class="download-link" id="projectZip" href="/mnt/data/ecowise-project[1].zip" download>📦 Download uploaded project ZIP</a>
+  </main>
+
+  <script>
+    (function(){
+      'use strict';
+
+      // Config
+      const API_BASE = 'http://localhost:4000/api';
+      const TIMEOUT = 10000; // ms
+
+      // DOM
+      const form = document.getElementById('registerForm');
+      const usernameEl = document.getElementById('username');
+      const passwordEl = document.getElementById('password');
+      const registerBtn = document.getElementById('registerBtn');
+      const msgEl = document.getElementById('msg');
+      const togglePwBtn = document.getElementById('togglePw');
+      const pwStrengthBar = document.getElementById('pwStrengthBar');
+      const pwHint = document.getElementById('pwHint');
+
+      // helpers
+      function setMessage(text, danger=true) {
+        msgEl.textContent = text || '';
+        msgEl.style.color = danger ? 'var(--danger)' : 'var(--success)';
+      }
+      function clearMessage(){ setMessage('', true); }
+
+      function withTimeout(promise, ms = TIMEOUT) {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), ms);
+        return promise({ signal: controller.signal }).finally(() => clearTimeout(id));
+      }
+
+      // naive password strength (fast, client-side)
+      function passwordScore(pw) {
+        let score = 0;
+        if (!pw) return 0;
+        if (pw.length >= 6) score += 1;
+        if (pw.length >= 10) score += 1;
+        if (/[0-9]/.test(pw)) score += 1;
+        if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score += 1;
+        if (/[^A-Za-z0-9]/.test(pw)) score += 1;
+        return score; // 0..5
+      }
+      function updateStrength(pw) {
+        const s = passwordScore(pw);
+        const pct = (s / 5) * 100;
+        pwStrengthBar.style.width = pct + '%';
+        if (s <= 1) pwStrengthBar.style.background = 'var(--danger)';
+        else if (s <= 3) pwStrengthBar.style.background = '#f59e0b';
+        else pwStrengthBar.style.background = 'var(--success)';
+      }
+
+      // show/hide password
+      togglePwBtn.addEventListener('click', () => {
+        const isPw = passwordEl.type === 'password';
+        passwordEl.type = isPw ? 'text' : 'password';
+        togglePwBtn.textContent = isPw ? 'Hide' : 'Show';
+        togglePwBtn.setAttribute('aria-pressed', String(isPw));
+        passwordEl.focus();
+      });
+
+      // live strength hint
+      passwordEl.addEventListener('input', e => {
+        updateStrength(e.target.value);
+      });
+
+      // basic client-side validation before network call
+      function validateForm({ username, password }) {
+        if (!username || username.length < 2) return 'Username must be at least 2 characters';
+        if (!password || password.length < 6) return 'Password must be at least 6 characters';
+        return null;
+      }
+
+      // robust fetch with timeout wrapper
+      async function postJsonWithTimeout(url, body = {}, timeoutMs = TIMEOUT) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal: controller.signal
+          });
+          const text = await res.text();
+          let json = {};
+          try { json = text ? JSON.parse(text) : {}; } catch(e) { json = { error: 'Invalid server response' }; }
+          return { ok: res.ok, status: res.status, json };
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      // handle submit
+      form.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        clearMessage();
+
+        const username = usernameEl.value.trim();
+        const password = passwordEl.value;
+
+        const err = validateForm({ username, password });
+        if (err) { setMessage(err, true); return; }
+
+        // disable UI
+        registerBtn.disabled = true;
+        registerBtn.textContent = 'Creating account...';
+
+        try {
+          const { ok, status, json } = await postJsonWithTimeout(API_BASE + '/register', { username, password });
+
+          if (!ok) {
+            // server returned an error
+            const serverMsg = (json && (json.error || json.message)) || `Registration failed (status ${status})`;
+            setMessage(serverMsg, true);
+            return;
+          }
+
+          // success path: expect token
+          if (json && json.token) {
+            localStorage.setItem('ecowise_token', json.token);
+            setMessage('Account created. Redirecting...', false);
+            // small delay for UX before redirect
+            setTimeout(() => { window.location.href = 'dashboard.html'; }, 700);
+            return;
+          }
+
+          // server ok but no token (edge-case)
+          setMessage('Account created. Please log in.', false);
+          setTimeout(() => { window.location.href = 'login.html'; }, 700);
+
+        } catch (err) {
+          if (err.name === 'AbortError') {
+            setMessage('Request timed out. Check your network and try again.', true);
+          } else {
+            console.error('Register error:', err);
+            setMessage('Network error. Please try again.', true);
+          }
+        } finally {
+          registerBtn.disabled = false;
+          registerBtn.textContent = 'Create account';
+        }
+      });
+
+      // small UX: submit on Enter inside password field
+      passwordEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') form.requestSubmit(); });
+
+      // progressive enhancement: if JS fails, fall back to a simple message
+      // set a friendly initial hint
+      pwHint.textContent = 'Use at least 6 characters. A stronger password helps protect your account.';
+      updateStrength(passwordEl.value || '');
+
+      // Expose small test helpers (useful during dev)
+      window._ecowise_register_debug = { validateForm, passwordScore };
+
+    })();
+  </script>
+</body>
+</html>

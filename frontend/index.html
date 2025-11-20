@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🌱 EcoWise - AI Circular Economy</title>
+
+  <!-- Fonts/Icons (optional) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    :root{
+      --bg:#0F172A; --card:#0b1220; --accent:#10B981; --muted:#94A3B8; --glass:rgba(255,255,255,0.03);
+      --white:#E6EEF8; --gradient:linear-gradient(135deg,#10B981,#3B82F6);
+    }
+    html,body{height:100%;margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#071023,#0f1720);color:var(--white)}
+    .container{max-width:980px;margin:28px auto;padding:18px}
+    header{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+    header h1{font-size:1.6rem;margin:0}
+    header p{color:var(--muted);margin:0}
+
+    main{display:grid;grid-template-columns:1fr;gap:18px;margin-top:18px}
+    section{background:var(--card);border-radius:12px;padding:14px;border:1px solid var(--glass)}
+    h2{margin:0 0 8px 0;font-size:1.05rem}
+    .upload-box{display:flex;gap:12px;align-items:center}
+    input[type="file"]{display:none}
+    .upload-btn{display:inline-block;padding:10px 14px;border-radius:10px;background:var(--gradient);color:#042117;font-weight:700;cursor:pointer}
+    .analyze-btn{margin-top:12px;padding:10px 14px;border-radius:10px;background:var(--accent);border:none;color:#042117;font-weight:700;cursor:pointer}
+    .small{color:var(--muted);font-size:0.9rem}
+
+    .image-preview-area{margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .preview-img{max-width:280px;max-height:180px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+    .clear-btn{background:#ef4444;border:none;color:white;padding:6px 10px;border-radius:8px;cursor:pointer}
+
+    .results-grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+    @media(max-width:900px){.results-grid{grid-template-columns:1fr}}
+
+    .progress{width:100%;height:10px;background:rgba(255,255,255,0.03);border-radius:8px;overflow:hidden;margin-top:10px}
+    .progress > i{display:block;height:100%;width:0;background:var(--gradient);transition:width 150ms linear}
+
+    .profile-section .profile-box{display:flex;align-items:center;gap:12px}
+    .avatar{width:64px;height:64px;border-radius:8px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#042117;font-weight:800}
+    .export-btn,.demo-btn{margin-top:8px;padding:8px 12px;border-radius:10px;border:none;cursor:pointer}
+    .export-btn{background:#06b6d4;color:#042117}
+    .demo-btn{background:#ec4899;color:white}
+
+    footer{text-align:center;color:var(--muted);margin-top:18px;font-size:0.9rem}
+
+    .no-results{padding:20px;text-align:center;color:var(--muted)}
+    .center-item{padding:10px;border-radius:8px;background:rgba(255,255,255,0.02);margin-bottom:8px}
+    .action-row{display:flex;gap:8px;margin-top:12px}
+    button.action-btn{flex:1;padding:10px;border-radius:8px;border:none;cursor:pointer}
+    button.action-btn.primary{background:var(--accent);color:#042117}
+    button.action-btn.secondary{background:transparent;border:1px solid var(--glass);color:var(--white)}
+  </style>
+</head>
+<body>
+  <div class="container" role="main">
+    <header>
+      <h1>🌱 EcoWise</h1>
+      <p>AI-Powered Circular Economy Platform — upload or capture an image to get recycling recommendations</p>
+    </header>
+
+    <main>
+      <!-- Upload -->
+      <section aria-labelledby="uploadTitle">
+        <h2 id="uploadTitle">📸 Upload Item Image</h2>
+        <div class="upload-box" aria-hidden="false">
+          <label class="upload-btn" for="imageUpload">Choose Image or Take Photo</label>
+          <input type="file" id="imageUpload" accept="image/*" capture="environment" aria-label="Upload image">
+          <div class="small">JPG / PNG / WebP — recommended under 8MB</div>
+        </div>
+
+        <div id="imagePreview" class="image-preview-area" aria-live="polite" style="display:none">
+          <img id="previewImage" class="preview-img" alt="Selected image preview">
+          <div>
+            <div id="previewMeta" class="small"></div>
+            <div style="margin-top:8px">
+              <button id="clearImageBtn" class="clear-btn" type="button" title="Clear selected image">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-row">
+          <button id="analyzeBtn" class="analyze-btn" disabled>🤖 Analyze with AI</button>
+          <button id="captureBtn" class="analyze-btn" style="background:var(--gradient);color:#042117">📷 Capture (Camera)</button>
+        </div>
+
+        <div id="uploadProgress" class="progress" style="display:none"><i></i></div>
+      </section>
+
+      <!-- Results -->
+      <section id="resultsSection" aria-labelledby="resultsTitle" style="display:none">
+        <h2 id="resultsTitle">🎯 Analysis Results</h2>
+        <div class="results-grid">
+          <div id="resultsContent">
+            <!-- item details inserted here -->
+          </div>
+          <aside id="centersPanel">
+            <h3 class="small">Nearby Recycling Centers</h3>
+            <div id="centersList" class="small"></div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- Profile -->
+      <section class="profile-section" aria-labelledby="profileTitle">
+        <h2 id="profileTitle">👤 Your Eco Profile</h2>
+        <div class="profile-box">
+          <div class="avatar" id="avatar">U</div>
+          <div>
+            <div id="profileName">Guest</div>
+            <div class="small" id="profileStats">EcoPoints: 0 • Items: 0</div>
+            <div style="margin-top:8px">
+              <button class="export-btn" id="exportBtn">📤 Export My Data</button>
+              <button class="demo-btn" id="demoBtn">🎬 Start Demo Mode</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div>Built with ❤️ for &lt;INFOTHON/&gt; 5.0</div>
+      <div class="small" style="margin-top:6px">Backend: <code id="backendUrl">http://localhost:5000</code></div>
+    </footer>
+  </div>
+
+  <script>
+  (function(){
+    'use strict';
+    const API_BASE = window.API_BASE || 'http://localhost:5000';
+    document.getElementById('backendUrl').textContent = API_BASE;
+
+    // state
+    let currentFile = null;
+    let currentUser = { username: localStorage.getItem('ecowise_username') || 'Guest', eco_points: 0, items_recycled: 0, carbon_saved_kg: 0 };
+
+    // DOM
+    const imageUpload = document.getElementById('imageUpload');
+    const previewImage = document.getElementById('previewImage');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewMeta = document.getElementById('previewMeta');
+    const clearImageBtn = document.getElementById('clearImageBtn');
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const uploadProgress = document.getElementById('uploadProgress');
+    const progressBar = uploadProgress.querySelector('i');
+
+    const resultsSection = document.getElementById('resultsSection');
+    const resultsContent = document.getElementById('resultsContent');
+    const centersList = document.getElementById('centersList');
+
+    const profileName = document.getElementById('profileName');
+    const profileStats = document.getElementById('profileStats');
+    const avatar = document.getElementById('avatar');
+    const exportBtn = document.getElementById('exportBtn');
+    const demoBtn = document.getElementById('demoBtn');
+
+    // helpers
+    function kb(n){ return Number(n).toLocaleString(); }
+    function show(el){ el.style.display = ''; }
+    function hide(el){ el.style.display = 'none'; }
+    function setProgress(fraction){ progressBar.style.width = (Math.min(1, Math.max(0, fraction)) * 100) + '%'; }
+
+    // preview handling
+    imageUpload.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      if (!f.type.startsWith('image/')) { alert('Please select an image file'); return; }
+      if (f.size > 12 * 1024 * 1024) { alert('File too large (max 12MB).'); return; }
+      currentFile = f;
+      previewImage.src = URL.createObjectURL(f);
+      previewMeta.textContent = `${f.name} • ${(f.size/1024|0)} KB`;
+      show(imagePreview);
+      analyzeBtn.disabled = false;
+    });
+
+    clearImageBtn.addEventListener('click', () => {
+      imageUpload.value = '';
+      currentFile = null;
+      previewImage.src = '';
+      hide(imagePreview);
+      analyzeBtn.disabled = true;
+      resultsSection.style.display = 'none';
+    });
+
+    // camera capture (uses file input capture where supported for mobile, or MediaDevices)
+    captureBtn.addEventListener('click', async () => {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+          // show a quick ephemeral capture UI
+          const v = document.createElement('video');
+          v.autoplay = true; v.playsInline = true; v.muted = true;
+          v.srcObject = stream;
+          // temporarily insert and capture first frame
+          v.style.position = 'fixed'; v.style.left = '-9999px';
+          document.body.appendChild(v);
+          await v.play();
+          const canvas = document.createElement('canvas');
+          canvas.width = v.videoWidth || 1280;
+          canvas.height = v.videoHeight || 720;
+          canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+          const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+          stream.getTracks().forEach(t=>t.stop());
+          v.remove();
+
+          const file = new File([blob], `capture_${Date.now()}.jpg`, { type: 'image/jpeg' });
+          currentFile = file;
+          previewImage.src = URL.createObjectURL(file);
+          previewMeta.textContent = `${file.name} • ${(file.size/1024|0)} KB`;
+          show(imagePreview);
+          analyzeBtn.disabled = false;
+        } catch (err) {
+          // fallback: trigger file input with capture hint (mobile)
+          imageUpload.setAttribute('capture', 'environment');
+          imageUpload.click();
+        }
+      } else {
+        // fallback: open file input (mobile may prompt camera)
+        imageUpload.setAttribute('capture', 'environment');
+        imageUpload.click();
+      }
+    });
+
+    // client-side compression (downscale + quality loop)
+    async function compressImage(file, maxBytes = 2_200_000, maxWidth = 1200) {
+      try {
+        const imageBitmap = await createImageBitmap(file);
+        let w = imageBitmap.width, h = imageBitmap.height;
+        if (w > maxWidth) { h = Math.round(h * (maxWidth / w)); w = maxWidth; }
+        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d'); ctx.drawImage(imageBitmap, 0, 0, w, h);
+        let quality = 0.9;
+        let blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+        while (blob && blob.size > maxBytes && quality > 0.35) {
+          quality -= 0.07;
+          blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', quality));
+        }
+        return blob || file;
+      } catch (e) {
+        // if createImageBitmap unsupported, return original file
+        return file;
+      }
+    }
+
+    // upload with XHR progress
+    function uploadWithProgress(blob, filename, onProgress){
+      return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append('image', blob, filename);
+        fd.append('username', currentUser.username || 'Guest');
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${API_BASE}/detect`, true);
+        xhr.responseType = 'json';
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+        xhr.onload = () => {
+          if (xhr.status >=200 && xhr.status <300) resolve(xhr.response);
+          else reject(new Error('Upload failed: ' + xhr.status));
+        };
+        xhr.onerror = () => reject(new Error('Network error'));
+        xhr.send(fd);
+      });
+    }
+
+    // analyze
+    analyzeBtn.addEventListener('click', async () => {
+      if (!currentFile) { alert('Select or capture an image first'); return; }
+      analyzeBtn.disabled = true;
+      show(uploadProgress);
+      setProgress(0);
+      resultsSection.style.display = '';
+
+      try {
+        const compressed = await compressImage(currentFile);
+        setProgress(0.05);
+
+        const res = await uploadWithProgress(compressed, currentFile.name || `upload_${Date.now()}.jpg`, (frac) => {
+          setProgress(frac * 0.95);
+        });
+
+        setProgress(1);
+        // normalize response
+        const data = res && typeof res === 'object' ? res : {};
+        if (!data.detected_objects) data.detected_objects = data.detected || data.items || [];
+        renderResults(data);
+      } catch (err) {
+        console.error(err);
+        // fallback mock
+        renderResults({
+          detected_objects: [{ name: 'bottle', confidence: 0.92 }],
+          recommendations: ['♻️ Rinse and recycle at center'],
+          carbon_saved_kg: 0.5,
+          total_points: 10
+        });
+      } finally {
+        analyzeBtn.disabled = false;
+        setTimeout(()=>hide(uploadProgress), 400);
+      }
+    });
+
+    // render results
+    function renderResults(data) {
+      resultsContent.innerHTML = '';
+      centersList.innerHTML = '';
+      const objects = Array.isArray(data.detected_objects) ? data.detected_objects : [];
+      if (!objects.length) {
+        resultsContent.innerHTML = `<div class="no-results"><strong>No items detected</strong><p class="small">Try a clearer photo or different angle.</p></div>`;
+        return;
+      }
+
+      const primary = objects[0];
+      const name = primary.name || primary.label || 'Item';
+      const confidence = (primary.confidence || primary.score || 0).toFixed(2);
+
+      // left: details
+      const left = document.createElement('div');
+      left.innerHTML = `
+        <h3 style="margin-top:0">${name}</h3>
+        <div class="small">Confidence: ${confidence}</div>
+        <p class="small" style="margin-top:10px">${getItemDetails(name).description}</p>
+        <div style="margin-top:12px"><strong>Action:</strong> ${getItemDetails(name).action} — ${getItemDetails(name).actionDescription}</div>
+        <div style="margin-top:12px">
+          <strong>EcoPoints:</strong> ${getItemDetails(name).points || (data.total_points||0)} • <strong>Carbon saved:</strong> ${data.carbon_saved_kg || 0} kg
+        </div>
+      `;
+
+      resultsContent.appendChild(left);
+
+      // load centers (best-effort)
+      fetch(`${API_BASE}/recycling-centers`).then(r => r.json()).then(json => {
+        const centers = Array.isArray(json.centers) ? json.centers : (json || []);
+        const matchIds = (getItemDetails(name).centers || []);
+        const picks = centers.filter(c => matchIds.includes(c.id)).slice(0,3);
+        if (!picks.length) centersList.innerHTML = `<div class="small">No specific centers found. Open the map for all centers.</div>`;
+        else centersList.innerHTML = picks.map(c => `<div class="center-item"><strong>${c.name}</strong><div class="small">${c.address || ''}</div></div>`).join('');
+      }).catch(e => {
+        centersList.innerHTML = `<div class="small">Couldn't fetch centers.</div>`;
+      });
+
+      // show results area
+      show(resultsSection);
+    }
+
+    // simple item details mapping (same as your previous mapping)
+    function getItemDetails(itemName) {
+      const db = {
+        bottle:{ name:'Plastic Bottle', category:'Recyclable Plastic', description:'Plastic bottles are widely recyclable', action:'Recycle', actionDescription:'Place in plastic recycling bin', points:10, carbon:0.5, centers:[1,2,5] },
+        phone:{ name:'Mobile Phone', category:'E-waste', description:'Contains valuable metals — recycle properly', action:'Recycle/Resell', actionDescription:'Wipe data, remove SIM', points:25, carbon:2.0, centers:[3] },
+        book:{ name:'Book', category:'Donation/Reuse', description:'Books in good condition can be donated', action:'Donate', actionDescription:'Check local libraries', points:15, centers:[8] },
+        glass:{ name:'Glass Bottle', category:'Recyclable Glass', description:'Glass can be recycled indefinitely', action:'Recycle', actionDescription:'Rinse and place in glass bin', points:12, centers:[1,5] },
+        can:{ name:'Metal Can', category:'Recyclable Metal', description:'Metal cans are highly recyclable', action:'Recycle', actionDescription:'Rinse and crush', points:10, centers:[1,6] },
+        clothing:{ name:'Clothing', category:'Reuse/Donate', description:'Donate wearable clothes', action:'Donate', actionDescription:'Wash and fold', points:12, centers:[7] },
+        item:{ name:'Item', category:'Check Guidelines', description:'Check local disposal rules', action:'Check', actionDescription:'Refer to local guidelines', points:5, centers:[1] }
+      };
+      return db[(itemName || '').toLowerCase()] || db['item'];
+    }
+
+    // export user data (JSON download)
+    exportBtn.addEventListener('click', () => {
+      const data = {
+        user: currentUser,
+        lastSeen: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(currentUser.username||'user')}_ecowise_profile.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // demo mode (simple sequence)
+    demoBtn.addEventListener('click', startDemoMode);
+    function startDemoMode(){
+      // mock a sample image selection and sample results
+      currentFile = null;
+      previewImage.src = '';
+      previewMeta.textContent = 'Demo mode — using sample bottle image';
+      show(imagePreview);
+      analyzeBtn.disabled = true;
+      // simulate short progress then show mock
+      show(uploadProgress); setProgress(0.2);
+      setTimeout(()=> setProgress(0.7), 600);
+      setTimeout(()=> {
+        setProgress(1);
+        hide(uploadProgress);
+        renderResults({
+          detected_objects: [{ name: 'bottle', confidence: 0.96 }],
+          carbon_saved_kg: 0.5,
+          total_points: 10,
+          recommendations: ['Rinse and recycle the bottle']
+        });
+        analyzeBtn.disabled = false;
+      }, 1200);
+    }
+
+    // profile display (basic)
+    function loadProfileUI(){
+      profileName.textContent = currentUser.username || 'Guest';
+      avatar.textContent = (currentUser.username||'G').charAt(0).toUpperCase();
+      profileStats.textContent = `EcoPoints: ${currentUser.eco_points || 0} • Items: ${currentUser.items_recycled || 0}`;
+    }
+    loadProfileUI();
+
+    // accessibility: keyboard support for file label
+    document.querySelector('.upload-btn').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') imageUpload.click();
+    });
+
+    // small safety: remove capture attribute after use
+    imageUpload.addEventListener('blur', () => imageUpload.removeAttribute('capture'));
+
+    // emergency counter: show default if UI zeros
+    setTimeout(() => { if (!currentUser.eco_points) currentUser.eco_points = 0; loadProfileUI(); }, 1000);
+
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Admin — EcoWise</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:Inter,system-ui,Arial;max-width:1100px;margin:28px auto;padding:12px;background:#f6f9fb;color:#0b1220}
+    h1{margin:0 0 12px 0}
+    .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+    input[type="text"]{padding:8px;border-radius:6px;border:1px solid #cbd5e1}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #2b6cb0;background:#2b6cb0;color:#fff;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid #cbd5e1;color:#0b1220}
+    table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(11,17,34,0.06)}
+    th,td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left}
+    th{background:#f1f5f9;font-weight:700}
+    td small{color:#64748b}
+    .note{color:#475569;margin-top:8px}
+    .link{color:#2b6cb0;text-decoration:none}
+    pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:6px;overflow:auto}
+  </style>
+</head>
+<body>
+  <h1>EcoWise — Admin</h1>
+
+  <div class="controls">
+    <label style="display:flex;gap:8px;align-items:center">
+      Admin secret:
+      <input id="adminSecret" type="text" placeholder="paste admin_secret here (or use ?admin_secret=... in URL)" style="width:360px" />
+    </label>
+
+    <button id="btnSearch">Search</button>
+    <button id="btnExport">Export CSV</button>
+    <button id="btnRefresh" class="ghost">Refresh</button>
+  </div>
+
+  <div class="note">Tip: you can also pass <code>?admin_secret=YOUR_SECRET</code> in the page URL to auto-fill the secret.</div>
+
+  <table id="usersTable">
+    <thead>
+      <tr><th>ID</th><th>Username</th><th>Created</th><th>Actions</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="details" style="margin-top:14px"></div>
+
+<script>
+(function(){
+  const $ = sel => document.querySelector(sel);
+  const tbody = $('#usersTable tbody');
+  const adminSecretInput = $('#adminSecret');
+  const urlParams = new URLSearchParams(location.search);
+  if (urlParams.get('admin_secret')) adminSecretInput.value = urlParams.get('admin_secret');
+
+  const API_ROOT = ''; // admin endpoints are relative: /admin/...
+
+  function adminFetch(path, opts) {
+    const secret = adminSecretInput.value || '';
+    const headers = (opts && opts.headers) || {};
+    // prefer header auth, but also allow query param fallback
+    if (secret) headers['x-admin-secret'] = secret;
+    return fetch((API_ROOT + path) + (secret && !opts?.noQuery ? ('?admin_secret=' + encodeURIComponent(secret)) : ''), {
+      ...opts,
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers
+      }
+    });
+  }
+
+  async function loadUsers(search='') {
+    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    try {
+      const q = '/admin/users?limit=200&search=' + encodeURIComponent(search);
+      const res = await adminFetch(q, { noQuery: false });
+      if (!res.ok) {
+        const t = await res.text();
+        tbody.innerHTML = '<tr><td colspan="4">Auth failed or server error. See console for details.</td></tr>';
+        console.error('Admin users error', res.status, t);
+        return;
+      }
+      const data = await res.json();
+      const users = data.users || [];
+      if (!users.length) {
+        tbody.innerHTML = '<tr><td colspan="4">No users found.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      users.forEach(u => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${u.id}</td>
+                        <td><a href="#" class="viewUser" data-id="${u.id}">${u.username}</a></td>
+                        <td>${u.created_at}</td>
+                        <td>
+                          <button class="btnView" data-id="${u.id}">View</button>
+                          <button class="btnReset" data-username="${encodeURIComponent(u.username)}">Reset pwd</button>
+                        </td>`;
+        tbody.appendChild(tr);
+      });
+    } catch (e) {
+      console.error(e);
+      tbody.innerHTML = '<tr><td colspan="4">Network or server error. See console.</td></tr>';
+    }
+  }
+
+  async function viewUser(id) {
+    $('#details').innerHTML = 'Loading user details…';
+    try {
+      const res = await adminFetch('/admin/user/' + id, { noQuery: false });
+      if (!res.ok) {
+        $('#details').innerHTML = '<pre>Failed to load user details. Check admin secret.</pre>';
+        return;
+      }
+      const data = await res.json();
+      const user = data.user || {};
+      const history = data.history || [];
+      let html = `<h3>User: ${user.username} (id: ${user.id})</h3>`;
+      html += `<p><strong>Created:</strong> ${user.created_at}</p>`;
+      html += `<h4>Recent history (${history.length})</h4>`;
+      if (!history.length) html += '<div class="note">No history rows for this user.</div>';
+      else {
+        html += '<table style="width:100%;margin-top:8px"><thead><tr><th>File</th><th>Processed</th><th>Points</th></tr></thead><tbody>';
+        history.forEach(h => {
+          html += `<tr><td>${h.filename}</td><td><small>${h.processed_at}</small></td><td>${h.eco_points_earned||0}</td></tr>`;
+        });
+        html += '</tbody></table>';
+      }
+      $('#details').innerHTML = html;
+    } catch (e) {
+      console.error(e);
+      $('#details').innerHTML = '<pre>Network error loading details.</pre>';
+    }
+  }
+
+  async function resetPassword(usernameEncoded) {
+    const username = decodeURIComponent(usernameEncoded);
+    if (!confirm('Reset password for ' + username + ' ? A temporary password will be returned.')) return;
+    try {
+      const body = { username };
+      const res = await adminFetch('/admin/reset-password', { method: 'POST', body: JSON.stringify(body), noQuery: false });
+      if (!res.ok) {
+        const txt = await res.text();
+        alert('Failed to reset password. Check admin secret. ' + txt);
+        return;
+      }
+      const data = await res.json();
+      alert('Password reset OK. Temporary password:\n\n' + data.tempPassword + '\n\nShare securely with the user.');
+    } catch (e) {
+      console.error(e);
+      alert('Network error while resetting password.');
+    }
+  }
+
+  document.getElementById('btnSearch').addEventListener('click', ()=> loadUsers(document.getElementById('search')?.value || ''));
+  document.getElementById('btnRefresh').addEventListener('click', ()=> loadUsers());
+  document.getElementById('btnExport').addEventListener('click', ()=> {
+    const secret = adminSecretInput.value || '';
+    if (!secret && !confirm('No admin_secret provided in the page. The export will append no secret, and server likely reject the request. Continue?')) return;
+    const url = '/admin/export/users.csv?admin_secret=' + encodeURIComponent(secret);
+    window.location.href = url;
+  });
+
+  // delegated clicks for view / reset
+  tbody.addEventListener('click', (e) => {
+    const v = e.target;
+    if (v.matches('.viewUser') || v.matches('.btnView')) {
+      e.preventDefault();
+      const id = v.dataset.id;
+      viewUser(id);
+    } else if (v.matches('.btnReset')) {
+      const usernameEnc = v.dataset.username;
+      resetPassword(usernameEnc);
+    }
+  });
+
+  // initial load (if admin_secret provided via URL)
+  loadUsers('');
+})();
+</script>
+</body>
+</html>

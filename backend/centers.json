@@ -1,0 +1,34 @@
+[
+  {
+    "address": "Near Bus Stand, MG Road, Hassan",
+    "distance": "0.5 km",
+    "hours": "8:00 AM - 6:00 PM",
+    "id": 1,
+    "lat": 13.0069,
+    "lng": 76.0991,
+    "name": "Hassan City Municipal Waste Center",
+    "rating": 4.2,
+    "services": [
+      "Plastic",
+      "Paper",
+      "Glass",
+      "Metal"
+    ],
+    "type": "recycling"
+  },
+  {
+    "address": "Station Road, Hassan",
+    "distance": "1.1 km",
+    "hours": "9:00 AM - 5:00 PM",
+    "id": 2,
+    "lat": 13.008,
+    "lng": 76.1005,
+    "name": "Community Donation Center",
+    "rating": 4.0,
+    "services": [
+      "Books",
+      "Clothes"
+    ],
+    "type": "donation"
+  }
+]
