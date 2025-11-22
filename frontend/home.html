@@ -6,7 +6,7 @@
   <title>🌱 EcoWise — AI Circular Economy Platform</title>
 
   <!-- Fonts / Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
   <style>
@@ -42,12 +42,54 @@
     .btn-primary{background:var(--gradient);color:white}
     .btn-outline{background:transparent;border:1px solid var(--glass-border);color:var(--text)}
 
-    /* cards visual */
-    .floating-cards{position:relative;height:320px}
-    .card{position:absolute;background:var(--glass);border-radius:14px;padding:12px;border:1px solid var(--glass-border);width:190px}
-    .card-1{top:8px;left:0}
-    .card-2{top:120px;right:0}
-    .card-3{bottom:0;left:80px}
+    /* === Floating cards - new CSS + absolute random placement === */
+    .cards-area {
+      position: relative;
+      width: 100%;
+      height: 320px;            /* hero area height for cards */
+      min-height: 220px;
+      overflow: visible;
+      pointer-events: none;     /* let clicks pass to underlying content; individual cards enable pointer-events */
+    }
+
+    .floating-card {
+      position: absolute;       /* JS sets top/left */
+      display: inline-block;
+      background: var(--glass);
+      border-radius: 14px;
+      padding: 14px 16px;
+      box-shadow: 0 8px 24px rgba(2,6,23,0.45);
+      transform-origin: center;
+      width: 190px;
+      border: 1px solid var(--glass-border);
+      animation: floatY 6s ease-in-out infinite;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+      pointer-events: auto;     /* allow hover/clicks */
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    /* Up–down floating animation */
+    @keyframes floatY {
+      0%   { transform: translateY(0px) rotate(0deg); }
+      25%  { transform: translateY(-10px) rotate(-0.5deg); }
+      50%  { transform: translateY(0px) rotate(0deg); }
+      75%  { transform: translateY(8px) rotate(0.5deg); }
+      100% { transform: translateY(0px) rotate(0deg); }
+    }
+
+    /* Hover boost */
+    .floating-card:hover {
+      transform: translateY(-12px) scale(1.03);
+      box-shadow: 0 16px 32px rgba(2,6,23,0.6);
+    }
+
+    /* Reduced motion */
+    @media (prefers-reduced-motion: reduce) {
+      .floating-card { animation: none; transform: none; }
+      .floating-card:hover { transform: none; box-shadow: 0 8px 18px rgba(2,6,23,0.4); }
+    }
+    /* === end floating cards CSS === */
 
     /* features */
     .section-header{text-align:center;padding:48px 20px 6px}
@@ -150,24 +192,28 @@
         </div>
       </div>
 
-      <div class="floating-cards" aria-hidden="true">
-        <div class="card card-1">
+      <!-- Cards area: JS will randomize absolute positions -->
+      <div class="cards-area" id="cardsArea" aria-hidden="true">
+        <div class="floating-card">
           <div style="font-size:20px">📱</div>
           <div style="font-weight:700;margin-top:6px">Mobile Phones</div>
           <div class="muted" style="margin-top:6px">E-waste recycling</div>
         </div>
-        <div class="card card-2">
+
+        <div class="floating-card">
           <div style="font-size:20px">🥤</div>
           <div style="font-weight:700;margin-top:6px">Plastic Bottle</div>
           <div class="muted" style="margin-top:6px">Recycling bin</div>
         </div>
-        <div class="card card-3">
+
+        <div class="floating-card">
           <div style="font-size:20px">📚</div>
           <div style="font-weight:700;margin-top:6px">Books</div>
           <div class="muted" style="margin-top:6px">Donation</div>
         </div>
-      </div>
-    </div>
+      </div> <!-- <-- closed hero-container inner column correctly here -->
+
+    </div> <!-- hero-container -->
   </section>
 
   <!-- features -->
@@ -261,134 +307,268 @@
     </div>
   </div>
 
-  <script>
-    // Small config
-    const API_BASE = window.API_BASE || 'http://localhost:5000';
+<script>
+/*
+  Full client-side JS for home.html
+  - tagline selector
+  - demo modal
+  - smooth scroll
+  - stats loader + animateNumber
+  - robust non-overlapping random placement for floating cards
+  - resize / load handlers, exposed window.ecowisePlaceCards()
+*/
 
-    // Tagline logic
-    const taglines = [
-      ["Waste","Wealth"],
-      ["Trash","Treasure"],
-      ["Eco","Here"],
-      ["Reimagine","Recycling"],
-      ["Sustainability","Simple"],
-      ["Smart","Brighter Future"]
-    ];
+const API_BASE = window.API_BASE || 'http://localhost:5000';
 
-    document.getElementById('year').textContent = new Date().getFullYear();
+// ---------- Tagline / UI ----------
+const taglines = [
+  ["Waste","Wealth"],
+  ["Trash","Treasure"],
+  ["Eco","Here"],
+  ["Reimagine","Recycling"],
+  ["Sustainability","Simple"],
+  ["Smart","Brighter Future"]
+];
 
-    // Toggle tagline selector
-    const toggle = document.getElementById('taglineToggle');
-    const options = document.getElementById('taglineOptions');
-    toggle.addEventListener('click', (e) => {
-      const expanded = toggle.getAttribute('aria-expanded') === 'true';
-      toggle.setAttribute('aria-expanded', String(!expanded));
-      options.classList.toggle('active');
-      options.setAttribute('aria-hidden', String(expanded));
+document.getElementById('year').textContent = new Date().getFullYear();
+
+(function setupTaglineUI(){
+  const toggleBtn = document.getElementById('taglineToggle');
+  const optionsBox = document.getElementById('taglineOptions');
+  if (!toggleBtn || !optionsBox) return;
+
+  toggleBtn.addEventListener('click', () => {
+    const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+    toggleBtn.setAttribute('aria-expanded', String(!expanded));
+    optionsBox.classList.toggle('active');
+    optionsBox.setAttribute('aria-hidden', String(expanded));
+  });
+
+  document.querySelectorAll('.tagline-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const idx = Number(opt.dataset.index || 0);
+      const [a,b] = taglines[idx] || taglines[0];
+      const left = document.createElement('span'); left.className = 'gradient-text'; left.textContent = a;
+      const right = document.createElement('span'); right.className = 'gradient-text'; right.textContent = b;
+      const title = document.getElementById('heroTitle');
+      if (!title) return;
+      title.innerHTML = 'Transform ';
+      title.appendChild(left);
+      title.innerHTML += ' into ';
+      title.appendChild(right);
+
+      document.querySelectorAll('.tagline-option').forEach(o => o.classList.remove('active'));
+      opt.classList.add('active');
+      optionsBox.classList.remove('active');
+      optionsBox.setAttribute('aria-hidden','true');
+      toggleBtn.setAttribute('aria-expanded','false');
     });
+  });
 
-    // clicking an option
-    document.querySelectorAll('.tagline-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        const idx = Number(opt.dataset.index || 0);
-        const [a,b] = taglines[idx] || taglines[0];
-        document.getElementById('taglineMain').textContent = '';
-        // inject safe text pieces with gradient spans
-        const left = document.createElement('span');
-        left.className = 'gradient-text';
-        left.textContent = a;
-        const right = document.createElement('span');
-        right.className = 'gradient-text';
-        right.textContent = b;
+  // click outside closes the panel
+  document.addEventListener('click', (e) => {
+    const sel = document.querySelector('.tagline-selector');
+    if (!sel) return;
+    if (!sel.contains(e.target)) {
+      optionsBox.classList.remove('active');
+      optionsBox.setAttribute('aria-hidden','true');
+      toggleBtn.setAttribute('aria-expanded','false');
+    }
+  });
+})();
 
-        const title = document.getElementById('heroTitle');
-        title.innerHTML = `Transform `;
-        title.appendChild(left);
-        title.innerHTML += ' into ';
-        title.appendChild(right);
+// ---------- Demo modal ----------
+(function setupDemoModal(){
+  const demoBtn = document.getElementById('liveDemoBtn');
+  const demoModal = document.getElementById('demoModal');
+  if (!demoBtn || !demoModal) return;
+  demoBtn.addEventListener('click', () => {
+    demoModal.classList.add('show');
+    demoModal.setAttribute('aria-hidden','false');
+  });
+  window.closeDemo = function() {
+    demoModal.classList.remove('show');
+    demoModal.setAttribute('aria-hidden','true');
+  };
+})();
 
-        document.querySelectorAll('.tagline-option').forEach(o => o.classList.remove('active'));
-        opt.classList.add('active');
+// ---------- Smooth scroll ----------
+function scrollToFeatures(){
+  const el = document.getElementById('features');
+  if (!el) return;
+  el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+window.scrollToFeatures = scrollToFeatures;
 
-        options.classList.remove('active');
-        options.setAttribute('aria-hidden','true');
-        toggle.setAttribute('aria-expanded','false');
-      });
-    });
+// ---------- Stats loader & animateNumber ----------
+async function loadStats(){
+  try{
+    const res = await fetch(API_BASE + '/stats');
+    if (!res.ok) throw new Error('no stats');
+    const d = await res.json();
+    animateNumber('statUsers', d.users || 1247);
+    animateNumber('statCenters', d.centers || 568);
+    const co2 = d.co2_saved_formatted || '2.5T';
+    if (typeof co2 === 'string') document.getElementById('statCO2').textContent = co2;
+    else animateNumber('statCO2', co2);
+  }catch(e){
+    animateNumber('statUsers', 1247);
+    animateNumber('statCenters', 568);
+    document.getElementById('statCO2').textContent = '2.5T';
+  }
+}
 
-    // close when clicking outside
-    document.addEventListener('click', (e) => {
-      const sel = document.querySelector('.tagline-selector');
-      if (!sel.contains(e.target)) {
-        options.classList.remove('active');
-        options.setAttribute('aria-hidden','true');
-        toggle.setAttribute('aria-expanded','false');
+function animateNumber(id, value){
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (typeof value === 'string'){ el.textContent = value; return; }
+  const start = 0;
+  const end = Number(value);
+  const duration = 900;
+  let startTime = null;
+  function step(timestamp){
+    if (!startTime) startTime = timestamp;
+    const progress = Math.min((timestamp - startTime) / duration, 1);
+    const cur = Math.floor(progress * (end - start) + start);
+    el.textContent = cur;
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ---------- Floating cards placement (full robust script) ----------
+(function setupFloatingCards(){
+
+  // CONFIG: buffer around cards (px). Increase for more gap.
+  const BUFFER = 40;   // ~1 cm gap on many screens (user requested)
+
+  // Helper: checks if two rects intersect with a buffer gap
+  function intersectsWithBuffer(a, b, buffer = BUFFER){
+    return !(
+      a.right + buffer < b.left ||
+      a.left - buffer > b.right ||
+      a.bottom + buffer < b.top ||
+      a.top - buffer > b.bottom
+    );
+  }
+
+  // Converts bounding box (px coords) to a simple object
+  function makeBox(left, top, w, h){
+    return { left, top, right: left + w, bottom: top + h, w, h };
+  }
+
+  // Main placement function (exposed)
+  function placeCards() {
+    const area = document.getElementById('cardsArea');
+    if (!area) return;
+    // collect live/fresh cards (so adding/removing works)
+    const cards = Array.from(area.querySelectorAll('.floating-card'));
+    if (!cards.length) return;
+
+    // ensure area has measurable size
+    const areaRect = area.getBoundingClientRect();
+    const areaW = Math.max(areaRect.width, 1);
+    const areaH = Math.max(areaRect.height, 1);
+
+    const padding = 20; // internal padding from edges (px)
+    const placed = [];
+
+    // measure each card's natural size (rendered)
+    // we temporarily set left/top 0 so measurement stable
+    cards.forEach(c => { c.style.left = '0px'; c.style.top = '0px'; c.style.transform = 'none'; });
+
+    // measure after forcing layout
+    cards.forEach((card, idx) => {
+      const rect = card.getBoundingClientRect();
+      const w = Math.min(rect.width || 190, Math.max(110, areaW * 0.25)); // clamp width
+      const h = Math.min(rect.height || 120, Math.max(70, areaH * 0.18));  // clamp height
+
+      // allow some variability if card is flexible
+      let maxW = Math.max(10, areaW - w - padding * 2);
+      let maxH = Math.max(10, areaH - h - padding * 2);
+
+      let attempts = 0;
+      let placedBox = null;
+
+      while (attempts < 120 && !placedBox) {
+        const leftPx  = padding + Math.round(Math.random() * maxW);
+        const topPx   = padding + Math.round(Math.random() * maxH);
+        const candidate = makeBox(leftPx, topPx, w, h);
+
+        // ensure candidate is not too close to any already placed box
+        let ok = true;
+        for (const p of placed) {
+          if (intersectsWithBuffer(candidate, p)) { ok = false; break; }
+        }
+
+        if (ok) {
+          placedBox = candidate;
+          break;
+        }
+        attempts++;
       }
+
+      // fallback: gently stack without overlap if can't find position
+      if (!placedBox) {
+        const offset = placed.length * 34;
+        const leftPx = Math.min(padding + offset, areaW - w - padding);
+        const topPx = Math.min(padding + offset, areaH - h - padding);
+        placedBox = makeBox(leftPx, topPx, w, h);
+      }
+
+      // store placed rect (px)
+      placed.push(placedBox);
+
+      // convert px -> percent to remain responsive
+      const leftPct = (placedBox.left / areaW) * 100;
+      const topPct  = (placedBox.top  / areaH) * 100;
+
+      // apply style: use percentage positioning so resizing keeps relative layout
+      card.style.position = 'absolute';
+      card.style.left = leftPct.toFixed(3) + '%';
+      card.style.top  = topPct.toFixed(3) + '%';
+
+      // small random rotation for variety (but keep within tiny degs)
+      const rot = (Math.random() - 0.5) * 1.4; // -0.7 .. +0.7 deg
+      // set base transform to rotation only — the float animation will add translateY etc
+      card.style.transform = `rotate(${rot}deg)`;
+
+      // randomize floating animation timing for organic effect
+      card.style.animationDuration = (5 + Math.random() * 3).toFixed(2) + 's';
+      card.style.animationDelay = (Math.random() * 1.6).toFixed(2) + 's';
     });
 
-    // demo modal controls
-    const demoBtn = document.getElementById('liveDemoBtn');
-    const demoModal = document.getElementById('demoModal');
-    demoBtn.addEventListener('click', () => {
-      demoModal.classList.add('show');
-      demoModal.setAttribute('aria-hidden','false');
-    });
-    function closeDemo(){
-      demoModal.classList.remove('show');
-      demoModal.setAttribute('aria-hidden','true');
-    }
+    // expose last placed boxes for debugging (optional)
+    window._ecowisePlacedRects = placed;
+  }
 
-    // smooth scroll to features
-    function scrollToFeatures(){
-      document.getElementById('features').scrollIntoView({behavior:'smooth',block:'start'});
-    }
-    window.scrollToFeatures = scrollToFeatures;
+  // debounce helper
+  function debounce(fn, wait = 160){
+    let t;
+    return function(...args){ clearTimeout(t); t = setTimeout(()=>fn(...args), wait); };
+  }
 
-    // small animated counters: will attempt to fetch stats from backend; fallback to defaults
-    async function loadStats(){
-      try{
-        const res = await fetch(API_BASE + '/stats');
-        if (!res.ok) throw new Error('no stats');
-        const d = await res.json();
-        animateNumber('statUsers', d.users || 1247);
-        animateNumber('statCenters', d.centers || 568);
-        animateNumber('statCO2', d.co2_saved_formatted || '2.5T');
-      }catch(e){
-        // fallback static numbers with subtle animation
-        animateNumber('statUsers', 1247);
-        animateNumber('statCenters', 568);
-        // CO2 label supports string so handle accordingly
-        document.getElementById('statCO2').textContent = '2.5T';
-      }
-    }
+  // expose globally for manual re-position
+  window.ecowisePlaceCards = placeCards;
 
-    function animateNumber(id, value){
-      const el = document.getElementById(id);
-      if (!el) return;
-      if (typeof value === 'string'){ el.textContent = value; return; }
-      const start = 0;
-      const end = Number(value);
-      const duration = 900;
-      let startTime = null;
-      function step(timestamp){
-        if (!startTime) startTime = timestamp;
-        const progress = Math.min((timestamp - startTime) / duration, 1);
-        const cur = Math.floor(progress * (end - start) + start);
-        el.textContent = cur;
-        if (progress < 1) requestAnimationFrame(step);
-      }
-      requestAnimationFrame(step);
-    }
+  // trigger initial placement after load + a later time to ensure fonts/images settled
+  window.addEventListener('load', () => {
+    setTimeout(placeCards, 80);
+    setTimeout(placeCards, 420);
+  });
 
-    // map backing — when user clicked a center earlier we saved an ID
-    if (localStorage.getItem('selectedCenter')) {
-      // noop here — map reads it when loading
-    }
+  // reposition on resize/visibilitychange
+  window.addEventListener('resize', debounce(placeCards, 140));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) placeCards(); });
 
-    // Init
-    loadStats();
-    window.changeTagline = function(i){ document.querySelector(`.tagline-option[data-index="${i}"]`)?.click(); };
-    window.showDemo = () => demoBtn.click();
-  </script>
+  // optional: shuffle periodically (comment out if you do not want auto-shuffle)
+  // const SHUFFLE_INTERVAL = 0; // seconds; set >0 to enable
+  // if (SHUFFLE_INTERVAL > 0) setInterval(placeCards, SHUFFLE_INTERVAL * 1000);
+})();
+
+// ---------- Kick stuff off ----------
+loadStats();
+</script>
+
 </body>
 </html>

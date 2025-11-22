@@ -2,7 +2,8 @@
 // Usage: include with <script type="module" src="/analyze.js"></script>
 // Expects elements present in the improved analyze.html (IDs used below)
 
-const API_BASE = window.API_BASE || 'http://localhost:5000';
+const API_BASE = window.API_BASE || 'http://localhost:4000';
+
 const MAX_UPLOAD_BYTES = 2_200_000; // target compressed size (~2.2 MB)
 const MAX_WIDTH = 1200;             // downscale width for large images
 

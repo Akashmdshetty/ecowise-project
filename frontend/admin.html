@@ -5,78 +5,133 @@
   <title>Admin — EcoWise</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body{font-family:Inter,system-ui,Arial;max-width:1100px;margin:28px auto;padding:12px;background:#f6f9fb;color:#0b1220}
-    h1{margin:0 0 12px 0}
-    .controls{display:flex;gap:8px;align-items:center;margin-bottom:12px}
-    input[type="text"]{padding:8px;border-radius:6px;border:1px solid #cbd5e1}
-    button{padding:8px 12px;border-radius:6px;border:1px solid #2b6cb0;background:#2b6cb0;color:#fff;cursor:pointer}
-    button.ghost{background:transparent;border:1px solid #cbd5e1;color:#0b1220}
-    table{width:100%;border-collapse:collapse;margin-top:12px;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(11,17,34,0.06)}
-    th,td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left}
+    :root{
+      --bg:#f6f9fb; --card:#fff; --muted:#64748b; --accent:#2b6cb0; --text:#0b1220;
+      --radius:8px; --pad:10px;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    body{
+      background:var(--bg);
+      color:var(--text);
+      max-width:1100px;
+      margin:28px auto;
+      padding:16px;
+    }
+    .top { display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap; }
+    h1{margin:0 0 6px 0;font-size:20px}
+    .controls{display:flex;gap:8px;align-items:center;margin:8px 0 14px 0;flex-wrap:wrap}
+    .field{display:flex;gap:8px;align-items:center}
+    input[type="text"], input[type="search"]{
+      padding:8px;border-radius:6px;border:1px solid #cbd5e1; min-height:36px;
+    }
+    button{
+      padding:8px 12px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;
+      min-height:36px;
+    }
+    button.ghost{background:transparent;border:1px solid #cbd5e1;color:var(--text)}
+    table{width:100%;border-collapse:collapse;margin-top:12px;background:var(--card);border-radius:var(--radius);overflow:hidden;box-shadow:0 6px 18px rgba(11,17,34,0.06)}
+    th,td{padding:10px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:middle}
     th{background:#f1f5f9;font-weight:700}
-    td small{color:#64748b}
+    td small{color:var(--muted)}
     .note{color:#475569;margin-top:8px}
-    .link{color:#2b6cb0;text-decoration:none}
+    .link{color:var(--accent);text-decoration:none}
     pre{background:#0b1220;color:#e6eef8;padding:12px;border-radius:6px;overflow:auto}
+    #details{margin-top:14px}
+    .muted{color:var(--muted)}
+    .loading{opacity:0.7;font-style:italic}
+    .nowrap{white-space:nowrap}
+    @media (max-width:640px){
+      .controls{flex-direction:column;align-items:stretch}
+      input[type="text"]{width:100%}
+      .field{width:100%}
+    }
   </style>
 </head>
 <body>
-  <h1>EcoWise — Admin</h1>
-
-  <div class="controls">
-    <label style="display:flex;gap:8px;align-items:center">
-      Admin secret:
-      <input id="adminSecret" type="text" placeholder="paste admin_secret here (or use ?admin_secret=... in URL)" style="width:360px" />
-    </label>
-
-    <button id="btnSearch">Search</button>
-    <button id="btnExport">Export CSV</button>
-    <button id="btnRefresh" class="ghost">Refresh</button>
+  <div class="top">
+    <div>
+      <h1>EcoWise — Admin</h1>
+      <div class="note">Tip: you can pass <code>?admin_secret=YOUR_SECRET</code> in the URL to prefill the secret (not recommended for shared devices).</div>
+    </div>
   </div>
 
-  <div class="note">Tip: you can also pass <code>?admin_secret=YOUR_SECRET</code> in the page URL to auto-fill the secret.</div>
+  <div class="controls" role="region" aria-label="Admin controls">
+    <label class="field" title="Paste admin secret">
+      <span class="muted">Admin secret:</span>
+      <input id="adminSecret" type="text" placeholder="paste admin_secret here" style="width:360px" aria-label="admin secret" />
+    </label>
 
-  <table id="usersTable">
+    <label class="field">
+      <span class="muted">Search users:</span>
+      <input id="search" type="search" placeholder="username, email, or id" aria-label="search users" />
+    </label>
+
+    <div style="display:flex;gap:8px;align-items:center">
+      <button id="btnSearch" title="Search users (limit 200)">Search</button>
+      <button id="btnRefresh" class="ghost" title="Reload users">Refresh</button>
+      <button id="btnExport" title="Export users as CSV (will use header auth)">Export CSV</button>
+    </div>
+  </div>
+
+  <table id="usersTable" aria-describedby="tableDesc">
+    <caption id="tableDesc" style="text-align:left;padding:8px 12px;color:var(--muted)">Users list (max 200)</caption>
     <thead>
-      <tr><th>ID</th><th>Username</th><th>Created</th><th>Actions</th></tr>
+      <tr><th class="nowrap">ID</th><th>Username</th><th>Created</th><th>Actions</th></tr>
     </thead>
-    <tbody></tbody>
+    <tbody><tr><td colspan="4" class="loading">No request made yet. Click Search or Refresh.</td></tr></tbody>
   </table>
 
-  <div id="details" style="margin-top:14px"></div>
+  <div id="details" aria-live="polite"></div>
 
 <script>
 (function(){
   const $ = sel => document.querySelector(sel);
   const tbody = $('#usersTable tbody');
   const adminSecretInput = $('#adminSecret');
+  const searchInput = $('#search');
   const urlParams = new URLSearchParams(location.search);
+
+  // If someone included secret in URL we prefill (but we DON'T automatically append it to GET URLs)
   if (urlParams.get('admin_secret')) adminSecretInput.value = urlParams.get('admin_secret');
 
-  const API_ROOT = ''; // admin endpoints are relative: /admin/...
+  const API_ROOT = ''; // keep relative; your backend serves /admin/...
 
-  function adminFetch(path, opts) {
-    const secret = adminSecretInput.value || '';
-    const headers = (opts && opts.headers) || {};
-    // prefer header auth, but also allow query param fallback
+  function escapeHtml(s='') {
+    return String(s).replace(/[&<>"'`=\/]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[c]));
+  }
+
+  function makeHeaders(extraHeaders){
+    const headers = {'Content-Type':'application/json', ...extraHeaders};
+    const secret = adminSecretInput.value && adminSecretInput.value.trim();
     if (secret) headers['x-admin-secret'] = secret;
-    return fetch((API_ROOT + path) + (secret && !opts?.noQuery ? ('?admin_secret=' + encodeURIComponent(secret)) : ''), {
-      ...opts,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      }
-    });
+    return headers;
+  }
+
+  async function adminFetch(path, opts = {}) {
+    const method = (opts.method || 'GET').toUpperCase();
+    const useQuery = !!opts.useQuery; // explicit opt-in to append in-query secret (deprecated)
+    const secret = adminSecretInput.value && adminSecretInput.value.trim();
+
+    // Build URL (do NOT append secret unless explicitly requested)
+    const url = API_ROOT + path + (useQuery && secret ? ('?admin_secret=' + encodeURIComponent(secret)) : '');
+
+    const fetchOpts = {
+      method,
+      headers: makeHeaders(opts.headers),
+      body: opts.body,
+      signal: opts.signal
+    };
+    return fetch(url, fetchOpts);
   }
 
   async function loadUsers(search='') {
-    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="loading">Loading…</td></tr>';
     try {
-      const q = '/admin/users?limit=200&search=' + encodeURIComponent(search);
-      const res = await adminFetch(q, { noQuery: false });
+      const q = '/admin/users?limit=200&search=' + encodeURIComponent(search || '');
+      const res = await adminFetch(q);
       if (!res.ok) {
-        const t = await res.text();
-        tbody.innerHTML = '<tr><td colspan="4">Auth failed or server error. See console for details.</td></tr>';
+        const t = await res.text().catch(()=>'<no body>');
+        tbody.innerHTML = `<tr><td colspan="4">Auth failed or server error (status ${res.status}). Check admin secret or server logs.</td></tr>`;
         console.error('Admin users error', res.status, t);
         return;
       }
@@ -88,13 +143,17 @@
       }
       tbody.innerHTML = '';
       users.forEach(u => {
+        const id = escapeHtml(u.id);
+        const username = escapeHtml(u.username || '');
+        const created = escapeHtml(u.created_at || u.created || '');
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${u.id}</td>
-                        <td><a href="#" class="viewUser" data-id="${u.id}">${u.username}</a></td>
-                        <td>${u.created_at}</td>
+
+        tr.innerHTML = `<td class="nowrap">${id}</td>
+                        <td><a href="#" class="viewUser link" data-id="${id}">${username}</a></td>
+                        <td><small>${created}</small></td>
                         <td>
-                          <button class="btnView" data-id="${u.id}">View</button>
-                          <button class="btnReset" data-username="${encodeURIComponent(u.username)}">Reset pwd</button>
+                          <button class="btnView" data-id="${id}">View</button>
+                          <button class="btnReset" data-username="${encodeURIComponent(u.username || '')}">Reset pwd</button>
                         </td>`;
         tbody.appendChild(tr);
       });
@@ -107,22 +166,22 @@
   async function viewUser(id) {
     $('#details').innerHTML = 'Loading user details…';
     try {
-      const res = await adminFetch('/admin/user/' + id, { noQuery: false });
+      const res = await adminFetch('/admin/user/' + encodeURIComponent(id));
       if (!res.ok) {
-        $('#details').innerHTML = '<pre>Failed to load user details. Check admin secret.</pre>';
+        $('#details').innerHTML = `<pre>Failed to load user details (status ${res.status}). Check admin secret.</pre>`;
         return;
       }
       const data = await res.json();
       const user = data.user || {};
       const history = data.history || [];
-      let html = `<h3>User: ${user.username} (id: ${user.id})</h3>`;
-      html += `<p><strong>Created:</strong> ${user.created_at}</p>`;
+      let html = `<h3>User: ${escapeHtml(user.username || '')} (id: ${escapeHtml(user.id || '')})</h3>`;
+      html += `<p><strong>Created:</strong> ${escapeHtml(user.created_at || user.created || '—')}</p>`;
       html += `<h4>Recent history (${history.length})</h4>`;
       if (!history.length) html += '<div class="note">No history rows for this user.</div>';
       else {
         html += '<table style="width:100%;margin-top:8px"><thead><tr><th>File</th><th>Processed</th><th>Points</th></tr></thead><tbody>';
         history.forEach(h => {
-          html += `<tr><td>${h.filename}</td><td><small>${h.processed_at}</small></td><td>${h.eco_points_earned||0}</td></tr>`;
+          html += `<tr><td>${escapeHtml(h.filename || '—')}</td><td><small>${escapeHtml(h.processed_at || h.created_at || '—')}</small></td><td>${escapeHtml(h.eco_points_earned || 0)}</td></tr>`;
         });
         html += '</tbody></table>';
       }
@@ -134,32 +193,56 @@
   }
 
   async function resetPassword(usernameEncoded) {
-    const username = decodeURIComponent(usernameEncoded);
+    const username = decodeURIComponent(usernameEncoded || '');
+    if (!username) { alert('Invalid username'); return; }
     if (!confirm('Reset password for ' + username + ' ? A temporary password will be returned.')) return;
     try {
       const body = { username };
-      const res = await adminFetch('/admin/reset-password', { method: 'POST', body: JSON.stringify(body), noQuery: false });
+      const res = await adminFetch('/admin/reset-password', { method: 'POST', body: JSON.stringify(body) });
       if (!res.ok) {
-        const txt = await res.text();
+        const txt = await res.text().catch(()=>'(no body)');
         alert('Failed to reset password. Check admin secret. ' + txt);
         return;
       }
       const data = await res.json();
-      alert('Password reset OK. Temporary password:\n\n' + data.tempPassword + '\n\nShare securely with the user.');
+      alert('Password reset OK. Temporary password:\n\n' + (data.tempPassword || data.temp_password || '(none returned)') + '\n\nShare securely with the user.');
     } catch (e) {
       console.error(e);
       alert('Network error while resetting password.');
     }
   }
 
-  document.getElementById('btnSearch').addEventListener('click', ()=> loadUsers(document.getElementById('search')?.value || ''));
-  document.getElementById('btnRefresh').addEventListener('click', ()=> loadUsers());
-  document.getElementById('btnExport').addEventListener('click', ()=> {
-    const secret = adminSecretInput.value || '';
-    if (!secret && !confirm('No admin_secret provided in the page. The export will append no secret, and server likely reject the request. Continue?')) return;
-    const url = '/admin/export/users.csv?admin_secret=' + encodeURIComponent(secret);
-    window.location.href = url;
-  });
+  async function exportCSV() {
+    const secret = adminSecretInput.value && adminSecretInput.value.trim();
+    if (!secret && !confirm('No admin_secret provided. The export request will be sent without authentication header and likely be rejected. Continue?')) return;
+    try {
+      // Request CSV and download via blob; pass header auth rather than query param.
+      const res = await adminFetch('/admin/export/users.csv', { method: 'GET' });
+      if (!res.ok) {
+        const t = await res.text().catch(()=>'');
+        alert('Export failed (status ' + res.status + '). Check admin secret. ' + t);
+        return;
+      }
+      const blob = await res.blob();
+      const filename = 'users_export.csv';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      alert('Network error while exporting CSV.');
+    }
+  }
+
+  // Events
+  $('#btnSearch').addEventListener('click', ()=> loadUsers(searchInput.value || ''));
+  $('#btnRefresh').addEventListener('click', ()=> { searchInput.value=''; loadUsers(''); });
+  $('#btnExport').addEventListener('click', exportCSV);
 
   // delegated clicks for view / reset
   tbody.addEventListener('click', (e) => {
@@ -174,8 +257,13 @@
     }
   });
 
-  // initial load (if admin_secret provided via URL)
-  loadUsers('');
+  // Enter key in search triggers search
+  searchInput.addEventListener('keydown', (ev)=> {
+    if (ev.key === 'Enter') { ev.preventDefault(); loadUsers(searchInput.value || ''); }
+  });
+
+  // initial load only if admin_secret present (safe choice)
+  if (adminSecretInput.value && adminSecretInput.value.trim()) loadUsers('');
 })();
 </script>
 </body>

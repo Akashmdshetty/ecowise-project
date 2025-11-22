@@ -633,3 +633,28 @@ window.ecowise = {
   startDemoMode,
   PROJECT_ZIP_URL
 };
+// Detect route
+app.post('/detect', upload.single('image'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No image uploaded" });
+  }
+
+  // Simple demo detection
+  return res.json({
+    detected_objects: [
+      { name: "bottle", points: 10 }
+    ],
+    carbon_saved_kg: 0.5
+  });
+});
+
+// Recycling centers route
+app.get('/recycling-centers', (req, res) => {
+  res.json({
+    centers: [
+      { id: 1, name: "Green Earth Center", address: "City Road 1" },
+      { id: 2, name: "Plastic Return Hub", address: "Sector 14" },
+      { id: 3, name: "E-Waste Depot", address: "Tech Park" }
+    ]
+  });
+});

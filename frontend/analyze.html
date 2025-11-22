@@ -187,9 +187,11 @@
 
   <script>
     /* ---------- CONFIG ---------- */
-    const API_BASE = window.API_BASE || 'http://localhost:5000'; // change if backend elsewhere
+    // <<<< SET TO YOUR BACKEND PORT >>>>>
+    const API_BASE = window.API_BASE || 'http://localhost:4000'; // <-- using :4000 (your backend)
     const MAX_UPLOAD_BYTES = 2_200_000; // target compressed max ~2.2MB
     const MAX_WIDTH = 1200; // image downscale width
+
     /* ---------- STATE ---------- */
     let currentFile = null;
     let cameraStream = null;
@@ -355,7 +357,7 @@
         xhr.upload.onprogress = (e) => { if (e.lengthComputable && typeof onProgress === 'function') onProgress(e.loaded / e.total); };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.response);
-          else reject(new Error(`Upload failed: ${xhr.status}`));
+          else reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
         };
         xhr.onerror = () => reject(new Error('Network error during upload'));
         xhr.send(fd);
@@ -385,14 +387,18 @@
         progressContainer.appendChild(progressEl);
         resultsContent.appendChild(progressContainer);
 
+        console.log('[analyze] uploading to', `${API_BASE}/detect`, { filename: uploadName, size: compressedBlob.size });
+
         const res = await uploadFileWithProgress(compressedBlob, uploadName, (fraction) => {
           progressEl.value = fraction;
         });
 
-        // If backend returns different schema, normalize
+        console.log('[analyze] server response:', res);
+
+        // Normalize possible response shapes
         const data = res && typeof res === 'object' ? res : {};
-        // fallback: some backends use "detected_objects" or "objects_found" — we handle gracefully
-        if (!data.detected_objects) { data.detected_objects = data.detected || data.items || []; }
+        data.detected_objects = data.detected_objects || data.detected || data.items || data.objects || data.results || [];
+
         // show results
         renderResults(data);
       }catch(err){
@@ -411,6 +417,7 @@
       resultsContent.innerHTML = '';
 
       const detected = Array.isArray(data.detected_objects) ? data.detected_objects : [];
+      console.log('[renderResults] detected array length:', detected.length, detected);
       if (!detected.length){
         resultsContent.innerHTML = `<div style="padding:28px;text-align:center"><h3>No items detected</h3><p style="color:var(--muted)">Try a clearer photo or different angle.</p><div style="margin-top:12px"><button class="analyze-btn" onclick="location.reload()">Try Again</button></div></div>`;
         return;
@@ -419,12 +426,12 @@
       // Use first detected as primary
       const primary = detected[0];
       // If backend supplied friendly name, use it; else derive
-      const name = primary.name || primary.label || primary.type || 'item';
-      const points = primary.points || primary.score || primary.eco_points || 0;
+      const name = primary.name || primary.label || primary.type || primary.item || primary.class || 'item';
+      const points = primary.points || primary.score || Math.round((primary.confidence || primary.probability || 0) * 100) || primary.eco_points || 0;
       const carbon = primary.carbon_saved_kg || primary.carbon || (data.carbon_saved_kg || 0);
 
       // generate details (you can extend mapping or request from backend)
-      const details = getItemDetails(name);
+      const details = getItemDetails(name.toLowerCase());
 
       // left column (details)
       const left = document.createElement('div');
@@ -464,13 +471,19 @@
       resultsContent.appendChild(container);
 
       // fetch centers and show a few
-      fetch(`${API_BASE}/recycling-centers`).then(r => r.json()).then(json => {
+      fetch(`${API_BASE}/recycling-centers`).then(r => {
+        if (!r.ok) throw new Error('centers fetch failed ' + r.status);
+        return r.json();
+      }).then(json => {
         const centers = Array.isArray(json.centers) ? json.centers : (json || []);
-        // pick centers that match details.centers if provided else first three
-        const picks = centers.filter(c => details.centers.includes(c.id)).slice(0,3);
+        // choose up to 3 centers; prefer listed ids if available
+        const picks = centers.filter(c => details.centers && details.centers.includes(c.id)).slice(0,3);
         const centersListEl = document.getElementById('centersList');
         if (!picks.length){
-          centersListEl.innerHTML = `<div class="no-centers">No specific centers found. Open full map for all centers.</div>`;
+          // show first three as fallback
+          const fallback = centers.slice(0,3);
+          if (!fallback.length) centersListEl.innerHTML = `<div class="no-centers">No centers available right now.</div>`;
+          else centersListEl.innerHTML = fallback.map(c => `<div class="center-item" data-id="${c.id}" onclick="openCenter(${c.id})"><div style="font-weight:600">${c.name}</div><div style="color:var(--primary);font-size:0.85rem">${c.lat && c.lng ? 'Open in Maps' : 'Contact for details'}</div><div style="color:var(--muted);font-size:0.85rem;margin-top:6px">${c.address || ''}</div></div>`).join('');
           return;
         }
         centersListEl.innerHTML = picks.map(c => `
@@ -489,7 +502,6 @@
 
     // quick helper to open center in maps
     window.openCenter = function(id){
-      // store and navigate to map page (map.html can read selectedCenter from localStorage)
       localStorage.setItem('selectedCenter', id);
       location.href = 'map.html';
     };
@@ -524,9 +536,12 @@
         clothing:{name:'Clothing',category:'Donation/Reuse',icon:'👕',points:12,carbonSaved:1.2,processingTime:'1.9s',action:'Donate',actionDescription:'Give to charity or thrift stores',description:'Donate wearable clothing.',tips:['Wash before donating'],centers:[7]},
         can:{name:'Metal Can',category:'Recyclable Metal',icon:'🥫',points:10,carbonSaved:0.6,processingTime:'1.7s',action:'Recycle',actionDescription:'Place in metal recycling bin',description:'Metal cans are highly recyclable.',tips:['Rinse thoroughly','Crush to save space'],centers:[1,6]},
         glass:{name:'Glass Bottle',category:'Recyclable Glass',icon:'🍶',points:12,carbonSaved:0.4,processingTime:'2.0s',action:'Recycle',actionDescription:'Place in glass recycling bin',description:'Glass is 100% recyclable.',tips:['Rinse','Remove lids'],centers:[1,5]},
+        phonecharger:{name:'Phone Charger',category:'E-waste',icon:'🔌',points:8,carbonSaved:0.3,processingTime:'1.6s',action:'Recycle',actionDescription:'Collect with e-waste',description:'Small electronics should be recycled.',tips:['Bundle with device'],centers:[3]},
         item:{name:'General Item',category:'Check Guidelines',icon:'📦',points:5,carbonSaved:0.2,processingTime:'1.5s',action:'Check Guidelines',actionDescription:'Consult local recycling rules',description:'Check with local authorities.',tips:['Check guidelines','Visit map'],centers:[1]}
       };
-      return db[itemName] || db['item'];
+      // normalize keys that might contain spaces or punctuation
+      const key = (itemName || '').toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,32);
+      return db[key] || db['item'];
     }
 
     /* ---------- READY ---------- */
@@ -535,6 +550,15 @@
 
     // initial UI
     disableAnalyze();
+
+    // expose for debugging
+    window.ecowiseDebug = {
+      API_BASE,
+      showMockResult,
+      placeCards: () => console.log('no-op'),
+    };
+
+    console.log('[analyze.html] initialized. API_BASE =', API_BASE);
   </script>
 </body>
 </html>

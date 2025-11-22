@@ -1,16 +1,9 @@
-# Core backend
 Flask==2.3.3
 flask-cors==4.0.0
-
-# Database
 Werkzeug==2.3.7
-
-# Image / ML
-pillow==10.0.0
+pillow==9.5.0
 numpy==1.24.3
 opencv-python-headless==4.8.1.78
-
-# YOLOv8 + Torch
 ultralytics==8.0.186
 torch>=2.0.0
 torchvision>=0.15.0
